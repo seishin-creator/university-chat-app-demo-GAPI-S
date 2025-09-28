@@ -2,8 +2,8 @@ import fs from "fs";
 import path from "path";
 import { parse } from "csv-parse/sync";
 import iconv from "iconv-lite";
-import { buildSystemPrompt } from "./buildSystemPrompt";
-import { buildNarrativePrompt } from "./buildNarrativePrompt"; // GPT生成型
+//import { buildSystemPrompt } from "./buildSystemPrompt";
+//import { buildNarrativePrompt } from "./buildNarrativePrompt"; // GPT生成型
 import { buildFixedPrompt } from "./buildFixedPrompt"; // ✅ 追加
 
 type Profile = Record<string, string>;

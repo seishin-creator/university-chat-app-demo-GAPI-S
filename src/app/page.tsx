@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Chat from './Chat.disabled';
+import Chat from './Chat';
 
 export default function Home() {
   const [showOpening, setShowOpening] = useState(false);

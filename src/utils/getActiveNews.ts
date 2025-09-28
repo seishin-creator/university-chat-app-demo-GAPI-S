@@ -1,48 +1,39 @@
-import * as XLSX from 'xlsx';
-import path from 'path';
-import fs from 'fs';
+// src/utils/getActiveNews.ts
+import newsData from '@/data/news.json';
 
-export interface NewsItem {
+// ニュース型定義
+export type NewsItem = {
+  id: string;
+  type: string;
   title: string;
   body: string;
+  body_past?: string;
   date?: string;
-  type?: string;
-  target?: string;
-  tags?: string;
-  trigger?: string;
-}
+  target: string;
+  rank: string;
+  tags: string;
+  prefixes?: string[];
+  prefix?: string;
+  expiry?: string; // expiry date
+};
 
-export function getOnStartNews(): NewsItem[] {
-  const filePath = path.join(process.cwd(), 'src', 'data', 'news.xlsx'); // ← ここだけ変更！
+// 有効なニュースを取得（expiryチェック付き）＋prefixランダム付与
+export function getRankedNewsWithPrefix(rank: string): NewsItem[] {
+  const now = new Date();
 
-  console.log('🧭 実際に読み込もうとしているファイルパス:', filePath); // ← 追加
-  // ファイル存在チェック
-  if (!fs.existsSync(filePath)) {
-    console.warn(`news.xlsx が見つかりません: ${filePath}`);
-    return [];
-  }
-
-  try {
-
-    const buffer = fs.readFileSync(filePath); // ← バイナリ読み込み
-    const workbook = XLSX.read(buffer, { type: 'buffer' }); // ← xlsxに渡す
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const jsonData: any[] = XLSX.utils.sheet_to_json(sheet);
-
-    return jsonData
-      .filter((item) => String(item.trigger).trim() === 'on_start') // ← 修正！
-      //.filter((item) => item.trigger === 'on_start')
-      .map((item) => ({
-        title: item.title || '',
-        body: item.body || '',
-        date: item.date || '',
-        type: item.type || '',
-        target: item.target || '',
-        tags: item.tags || '',
-        trigger: item.trigger || '',
-      }));
-  } catch (err) {
-    console.error('news.xlsx 読み込み中にエラーが発生しました:', err);
-    return [];
-  }
+  return newsData
+    .filter((item: NewsItem) => {
+      // 期限切れチェック
+      if (item.expiry) {
+        const expiryDate = new Date(item.expiry);
+        if (expiryDate < now) return false;
+      }
+      return item.rank === rank;
+    })
+    .map((item: NewsItem) => ({
+      ...item,
+      prefix: Array.isArray(item.prefixes)
+        ? item.prefixes[Math.floor(Math.random() * item.prefixes.length)]
+        : '',
+    }));
 }
