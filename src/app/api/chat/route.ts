@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-// OpenAIからGoogle Gen AI SDKへ変更
 import { GoogleGenAI, Content, Part } from '@google/genai';
 import { generateSystemPrompt } from '@/utils/generateSystemPrompt';
+// ★★★ 追記: googleapisライブラリをインポート ★★★
+import { google } from 'googleapis';
 
 // Chat.tsxからメッセージの型を再定義
 type Message = {
@@ -9,31 +10,56 @@ type Message = {
   content: string;
 };
 
-// ★★★ 外部検索ツール（Function Calling）の定義 ★★★
-// 実際にはここにGoogle Search APIなどを組み込みます
-async function googleSearch(query: string) {
-    console.log(`🔍 Tool Called! Search Query: ${query}`);
+// Google Custom Search APIクライアントを初期化
+const customsearch = google.customsearch('v1');
 
-    // ★★★ 修正済み: JSONオブジェクトを返すように変更（API要件）★★★
-    const searchResultObject = {
-        // 応答がJSON構造になるように、スニペットをオブジェクトとして返す
-        search_snippet: `
-            【Web検索結果の抜粋】
-            世真大学は、経済学部、法学部、文学部、国際学部の4学部を擁し、全ての学部でAIとデータサイエンスを学ぶことを必須としています。
-            最近の全国的なトピックスとして、AI倫理やデータプライバシーに関する議論が高校生の間でも高まっており、世真大学のAI教育はその最前線に位置づけられています。
-            また、ユーザーの質問である時事問題について、最新の情報では〇〇氏、△△氏、××氏が出馬を表明している。
-        `,
-    };
-    
-    return {
-        query: query,
-        result: searchResultObject, // JSONオブジェクトを返す
-    };
+// ★★★ 外部検索ツール（Function Calling）- 実際のWeb検索実装 ★★★
+async function googleSearch(query: string) {
+    console.log(`🔍 Tool Called! Running Web Search for: ${query}`);
+
+    try {
+        const response = await customsearch.cse.list({
+            auth: process.env.GOOGLE_SEARCH_API_KEY, // APIキーを参照
+            cx: process.env.GOOGLE_SEARCH_CX,     // 検索エンジンIDを参照
+            q: query,                              // モデルが生成した検索クエリ
+            num: 3,                                // 上位3件の結果を取得
+        });
+
+        // 検索結果のスニペットを整形
+        const searchResults = response.data.items?.map(item => ({
+            title: item.title,
+            snippet: item.snippet,
+            link: item.link,
+        })) || [];
+
+        if (searchResults.length === 0) {
+            return {
+                query: query,
+                result: { search_snippet: `検索結果は見つかりませんでした。` },
+            };
+        }
+
+        // 検索結果をJSON構造で返す
+        return {
+            query: query,
+            // JSON.stringifyで検索結果のオブジェクトを文字列化して渡す
+            result: { 
+                search_snippet: `【Web検索結果の抜粋】: ${JSON.stringify(searchResults)}` 
+            },
+        };
+
+    } catch (error) {
+        console.error('❌ Google Search API Error:', error);
+        // エラー時もモデルが次の回答を生成できるよう、エラーメッセージを返す
+        return {
+            query: query,
+            result: { search_snippet: `検索中にエラーが発生しました。Web検索APIでエラーが発生しました。` },
+        };
+    }
 }
 // ----------------------------------------------------
 
 const ai = new GoogleGenAI({
-  // 環境変数名をGEMINI_API_KEYに変更
   apiKey: process.env.GEMINI_API_KEY, 
 });
 
@@ -74,6 +100,15 @@ export async function POST(req: Request) {
     // システムプロンプトを生成
     let systemPromptRaw = await generateSystemPrompt();
 
+    // ★★★ 検索結果参照の指示をシステムプロンプトに追加し、利用を義務化する ★★★
+    systemPromptRaw += `\n
+    【🔍 検索結果参照の特別ルール】
+    もし Tool Calling（外部検索）の結果が提供された場合、あなたの回答は必ずその情報に基づいて構成し、
+    ペルソナ（関西弁、仏教テーマ）を維持しつつ、その情報を会話に織り交ぜて回答を完結させること。
+    外部情報を無視したり、使用せずに回答を生成してはいけません。
+    `;
+    // ★★★ 検索結果参照の指示ここまで ★★★
+
     // Bランクニュース挿入ロジック (クライアント側と重複するためここでは無効化)
     const shouldInsertBNews = false; 
     if (shouldInsertBNews && typeof systemPromptRaw === 'string') {
@@ -85,7 +120,6 @@ export async function POST(req: Request) {
     const initialContents: Content[] = messages
         .filter((msg: Message) => msg.role !== 'system')
         .map((msg: Message) => {
-            // ロールをOpenAIの 'user'/'assistant' から Geminiの 'user'/'model' に変換
             const role = msg.role === 'user' ? 'user' : 'model';
             return {
                 role: role,
@@ -100,7 +134,6 @@ export async function POST(req: Request) {
     // ★★★ Tool Calling 反復処理の開始 ★★★
     for (let i = 0; i < maxIterations; i++) {
         const response = await ai.models.generateContent({
-            // 高速なFlashモデルを使用
             model: 'gemini-2.5-flash', 
             contents: contents,
             config: {
@@ -108,7 +141,6 @@ export async function POST(req: Request) {
                 tools: [{ functionDeclarations: [
                     {
                         name: 'googleSearch',
-                        // 検索対象を拡張し、リッチな回答生成を促す
                         description: '回答の深みや具体性を増すため、またはユーザーの質問が求めている客観的な事実（ニュース、歴史、一般的な社会情勢、特定の人物名など）について検索が必要な場合に利用する。',
                         parameters: {
                             type: 'object',
@@ -142,13 +174,12 @@ export async function POST(req: Request) {
 
             // ツールからの応答を履歴に追加して、モデルに再度送信
             contents.push(
-                response.candidates![0].content, // ツール呼び出しを含むモデルの応答
+                response.candidates![0].content, 
                 {
-                    role: 'function', // ツール応答のロール
+                    role: 'function', 
                     parts: [{ 
                         functionResponse: {
                             name: 'googleSearch',
-                            // ツール実行結果のオブジェクトを渡す
                             response: toolResult.result, 
                         },
                     }],
@@ -165,7 +196,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ message: reply });
   } catch (error) {
     console.error('❌ API処理中のエラー:', error);
-    // 503エラーは一時的なものなので、メッセージを調整
     if (error instanceof Error && error.message.includes("code:503")) {
         return NextResponse.json({ error: '現在サーバーが大変混み合っています。少し時間をおいて再度お試しください。' }, { status: 503 });
     }
