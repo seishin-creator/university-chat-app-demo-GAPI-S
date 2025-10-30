@@ -2,6 +2,20 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 
+// 🚨 汎用性を持たせるための定数定義 (この部分を変更して切り替える)
+const AI_NICKNAME = '世真美容';
+const GREETING_MESSAGE = `✨やっほー！ようこそ、${AI_NICKNAME}へ！私もあんたとお喋りできてめっちゃ嬉しいわ！`;
+const ASK_NAME_MESSAGE = `ところで、あんたのことなんて呼んだらいい？友達みたいに話そっ💖`;
+const DEFAULT_ERROR_MESSAGE = `ごめん、なんかうまく答えられへんかったみたい💦マジごめんね！`;
+const NETWORK_ERROR_MESSAGE = `ごめん！通信エラーが出ちゃったよ😭ちょっと待ってまた話しかけてみて！`;
+
+// UIデザインの定数
+const AI_ICON_PATH = '/s-icon.png'; // ⚠️ アイコン画像
+const BG_IMAGE_PATH = '/s-background.png'; // ⚠️ 背景画像
+const PRIMARY_COLOR_CLASSES = 'bg-pink-500 hover:bg-pink-600'; // ボタンカラー
+const USER_BUBBLE_COLOR_CLASS = 'bg-pink-100'; // ユーザーメッセージの背景色
+const ASSISTANT_BUBBLE_COLOR_CLASS = 'bg-gray-100'; // AIメッセージの背景色
+
 const generateOrLoadSessionId = (): string => {
   if (typeof window === 'undefined') return '';
   let sid = localStorage.getItem('sessionId');
@@ -31,12 +45,12 @@ export default function Chat() {
 
       const greeting: Message = {
         role: 'assistant',
-        content: 'よう来てくれたな。私は世真大学や。ちょっと変わっとるかもしれんけど、今日は話せてうれしいわ。',
+        content: GREETING_MESSAGE, // 定数を使用
       };
 
       const askName: Message = {
         role: 'assistant',
-        content: 'ところで、あんたのこと、なんて呼んだらええやろか？',
+        content: ASK_NAME_MESSAGE, // 定数を使用
       };
 
       setMessages([greeting, askName]);
@@ -73,11 +87,13 @@ export default function Chat() {
       }
 
       const data = await res.json();
-      const assistantMessage = data.message ?? 'ごめん、うまく答えられへんかったわ。';
+      // 🚨 エラーメッセージも定数を使用
+      const assistantMessage = data.message ?? DEFAULT_ERROR_MESSAGE; 
       setMessages([...updatedMessages, { role: 'assistant', content: assistantMessage }]);
     } catch (err) {
       console.error("❌ 通信エラー:", err);
-      setMessages([...updatedMessages, { role: 'assistant', content: 'エラーが発生しました。' }]);
+      // 🚨 エラーメッセージも定数を使用
+      setMessages([...updatedMessages, { role: 'assistant', content: NETWORK_ERROR_MESSAGE }]);
     }
   };
 
@@ -85,7 +101,7 @@ export default function Chat() {
     <div
       className="flex flex-col h-screen"
       style={{
-        backgroundImage: "url('/school.png')",
+        backgroundImage: `url('${BG_IMAGE_PATH}')`, // 定数を使用
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
@@ -99,14 +115,14 @@ export default function Chat() {
               <div key={idx} className={`flex ${isUser ? 'justify-end' : 'justify-start'} items-start gap-2`}>
                 {!isUser && (
                   <img
-                    src="/sema-icon.png"
-                    alt="AI"
+                    src={AI_ICON_PATH} // 定数を使用
+                    alt={AI_NICKNAME}
                     className="w-8 h-8 rounded-full"
                   />
                 )}
                 <div
                   className={`p-2 rounded-md max-w-[70%] ${
-                    isUser ? 'bg-blue-100 text-right' : 'bg-gray-100 text-left'
+                    isUser ? `${USER_BUBBLE_COLOR_CLASS} text-right` : `${ASSISTANT_BUBBLE_COLOR_CLASS} text-left` 
                   }`}
                 >
                   {msg.content}
@@ -127,7 +143,7 @@ export default function Chat() {
             }}
           />
           <button
-            className="bg-blue-500 text-white px-4 py-2 rounded-md"
+            className={`${PRIMARY_COLOR_CLASSES} text-white px-4 py-2 rounded-md transition-colors`} // 定数を使用
             onClick={() => sendMessage()}
           >
             送信

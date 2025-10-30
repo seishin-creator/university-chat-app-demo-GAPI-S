@@ -3,12 +3,19 @@
 import { useState, useEffect } from 'react';
 import Chat from './Chat';
 
+// 🚨 汎用化のための定数定義 (この部分を変更して切り替える)
+const AI_INTRODUCTION_NAME = '世真美容';
+// AIの口調に合わせた挨拶文全体を定義
+// Chat.tsxの最初の挨拶とトーンを合わせ、オープニング画面用にアレンジ
+const AI_INTRODUCTION_PHRASE = `✨やっほー！ようこそ、${AI_INTRODUCTION_NAME}だよ！💖`; 
+
 export default function Home() {
   const [showOpening, setShowOpening] = useState(false);
   const [typedText, setTypedText] = useState('');
   const [showChat, setShowChat] = useState(false);
   const [openingText, setOpeningText] = useState('');
 
+  // 🚨 元のgetGreeting()関数は、硬い口調（おはようございます/こんにちは/こんばんは）のため使用しない
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 11) return 'おはようございます';
@@ -22,7 +29,8 @@ export default function Home() {
         method: 'POST',
       });
       const data = await res.json();
-      return data.message || '今日も元気にいきましょう。';
+      // 挨拶APIの応答は既に世真美容の口調になっているはず
+      return data.message || '今日も元気にいきましょう。'; 
     } catch (error) {
       console.error('自作API呼び出し失敗:', error);
       return 'うまく取得できませんでした。';
@@ -31,7 +39,8 @@ export default function Home() {
 
   useEffect(() => {
     const prepareOpening = async () => {
-      const greeting = getGreeting();
+      // 🚨 getGreeting() は使用しない
+
       const seasonal = await getSeasonalMessageFromAI();
 
       // 「」で囲まれていたら中身だけを取り出す
@@ -41,7 +50,10 @@ export default function Home() {
         cleanSeasonal = match[1];
       }
 
-      const fullText = `${greeting}\n世真大学です。\n${cleanSeasonal}\n今日はどんなお話をしましょうか？`;
+      // 🚨 修正箇所: AI_INTRODUCTION_PHRASEと季節の挨拶を結合し、口調を統一
+      // 「世真大学です。」の硬い表現を削除し、「世真美容」のトーンに完全に合わせる
+      // 構造: [オープニング挨拶]\n[季節のコメント]\n[会話への誘導]
+      const fullText = `${AI_INTRODUCTION_PHRASE}\n${cleanSeasonal}\n今日はどんなお話をする？マジ楽しみ！`;
       setOpeningText(fullText);
 
       setTimeout(() => {
@@ -79,7 +91,7 @@ export default function Home() {
       {showOpening ? (
         <div className="text-center whitespace-pre-line text-lg">{typedText}</div>
       ) : (
-        <img src="/logo.png" alt="University Logo" className="w-48 h-48 animate-fadeOut" />
+        <img src="/s-logo.png" alt="University Logo" className="w-48 h-48 animate-fadeOut" />
       )}
     </div>
   );
