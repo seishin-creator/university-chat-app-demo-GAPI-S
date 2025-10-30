@@ -1,11 +1,18 @@
+// =========================================================
+// 📄 ファイルの役割
+// = 1. フロントエンド (Chat.tsx) からのチャットリクエストを受け取るAPIエンドポイントです。
+// = 2. Google Geminiモデル (Function Calling対応) を使用して、ユーザーとの会話を処理します。
+// = 3. 必要に応じてWeb検索ツール (googleSearch) を呼び出し、リアルタイム情報を提供します。
+// = 4. セッションIDに基づき、チャット履歴を管理します。
+// =========================================================
 import { NextResponse } from 'next/server';
 import { GoogleGenAI, Content, Part } from '@google/genai';
 import { generateSystemPrompt } from '@/utils/generateSystemPrompt';
 import { google } from 'googleapis';
 
 // 🚨 汎用性を持たせるための定数定義 (この部分を変更して切り替える)
-const AI_NICKNAME = '世真美容'; 
-const NEW_PERSONA_DESCRIPTION = '親しみやすい友達、美容テーマ、若者言葉'; 
+const AI_NICKNAME = '世真美容';
+const NEW_PERSONA_DESCRIPTION = '親しみやすい友達、美容テーマ、若者言葉';
 
 // Chat.tsxからメッセージの型を再定義
 type Message = {
@@ -36,133 +43,110 @@ async function googleSearch(query: string) {
 
         if (searchResults.length === 0) {
             return {
-                query: query,
-                result: { search_snippet: `検索結果は見つかりませんでした。` },
+                result: '検索結果は見つかりませんでした。',
             };
         }
 
-        return {
-            query: query,
-            result: { 
-                search_snippet: `【Web検索結果の抜粋】: ${JSON.stringify(searchResults)}` 
-            },
-        };
+        // 結果をモデルに渡しやすいよう整形
+        const result = searchResults.map(item =>
+            `タイトル: ${item.title}\nスニペット: ${item.snippet}\nURL: ${item.link}`
+        ).join('\n---\n');
 
-    } catch (error) {
-        console.error('❌ Google Search API Error:', error);
         return {
-            query: query,
-            result: { search_snippet: `検索中にエラーが発生しました。Web検索APIでエラーが発生しました。` },
+            result: result,
+        };
+    } catch (error) {
+        console.error('Web Search Error:', error);
+        return {
+            result: 'Web検索の実行中にエラーが発生しました。',
         };
     }
 }
-// ----------------------------------------------------
 
-const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY, 
-});
-
-const globalAny = globalThis as any;
-if (!globalAny.sessionTracker) {
-    globalAny.sessionTracker = {};
-}
-const sessionTracker: Record<string, { turnCount: number; lastUserInputTime: number }> = globalAny.sessionTracker;
-
+// Next.jsのAPIルート (POSTメソッド)
 export async function POST(req: Request) {
+    const { messages, sessionId } = await req.json();
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        return NextResponse.json({ error: 'Gemini APIキーが設定されていません。' }, { status: 500 });
+    }
+
+    // 履歴管理の準備
+    // ★★★ Firestore の代わりに In-Memory なマップを使用（簡易的なデモ用） ★★★
+    // ⚠ 本番環境では、永続化されたデータベース（Firestoreなど）を使用してください。
+    if (typeof global.chatHistoryMap === 'undefined') {
+        global.chatHistoryMap = new Map();
+    }
+    const chatHistory: Message[] = global.chatHistoryMap.get(sessionId) || [];
+
+    // 現在のメッセージを履歴に追加
+    const currentMessage = messages[messages.length - 1];
+    chatHistory.push(currentMessage);
+    global.chatHistoryMap.set(sessionId, chatHistory);
+
+    // AIのシステムプロンプトを生成
+    // 🚨 毎回生成するのは非効率なので、本番ではキャッシュを検討してください
+    const systemInstruction = await generateSystemPrompt();
+
+    // Gemini API用の Content 形式に変換
+    const contents: Content[] = chatHistory.map(msg => {
+        const role = msg.role === 'user' ? 'user' : 'model';
+        return {
+            role,
+            parts: [{ text: msg.content }],
+        };
+    });
+
     try {
-        const body = await req.json();
-        const { messages, sessionId } = body;
+        const ai = new GoogleGenAI({ apiKey });
 
-        if (!messages || !Array.isArray(messages)) {
-            console.error('❌ 不正なmessages:', messages);
-            return NextResponse.json({ error: 'Invalid messages format' }, { status: 400 });
-        }
-
-        const now = Date.now();
-        if (!sessionId) {
-            console.warn('⚠️ sessionId が未指定です');
-        }
-
-        // ✅ セッションのターン数と時間を更新
-        if (sessionId) {
-            if (!sessionTracker[sessionId]) {
-                sessionTracker[sessionId] = {
-                    turnCount: 1,
-                    lastUserInputTime: now,
-                };
-            } else {
-                sessionTracker[sessionId].turnCount += 1;
-                sessionTracker[sessionId].lastUserInputTime = now;
-            }
-        }
-
-        // システムプロンプトを生成
-        let systemPromptRaw = await generateSystemPrompt();
-
-        // ★★★ 検索結果参照の指示をシステムプロンプトに追加し、利用を義務化する ★★★
-        // 🚨 ペルソナ指示を汎用的な定数に修正
-        systemPromptRaw += `\n
-        【🔍 検索結果参照の特別ルール】
-        もし Tool Calling（外部検索）の結果が提供された場合、あなたの回答は必ずその情報に基づいて構成し、
-        ペルソナ（${NEW_PERSONA_DESCRIPTION}）を維持しつつ、その情報を会話に織り交ぜて回答を完結させること。
-        外部情報を無視したり、使用せずに回答を生成してはいけません。
-        `;
-        // ★★★ 検索結果参照の指示ここまで ★★★
-
-        // Bランクニュース挿入ロジック (クライアント側と重複するためここでは無効化)
-        const shouldInsertBNews = false; 
-        if (shouldInsertBNews && typeof systemPromptRaw === 'string') {
-            systemPromptRaw += '\n##INSERT_B_NEWS##';
-        }
-
-
-        // メッセージ形式をGeminiのContent形式に変換
-        const initialContents: Content[] = messages
-            .filter((msg: Message) => msg.role !== 'system')
-            .map((msg: Message) => {
-                const role = msg.role === 'user' ? 'user' : 'model';
-                return {
-                    role: role,
-                    parts: [{ text: msg.content } as Part],
-                } as Content;
-            });
-
-        let contents = initialContents;
         let fullResponse;
-        let maxIterations = 5; 
+        let contentsLength = contents.length; // ツール呼び出しの無限ループを防ぐため
 
         // ★★★ Tool Calling 反復処理の開始 ★★★
-        for (let i = 0; i < maxIterations; i++) {
+        // ツール呼び出しを伴う再リクエストは最大3回までとする
+        for (let i = 0; i < 3; i++) {
+            // 履歴の重複送信を防ぐ
+            if (contents.length > contentsLength) {
+                contentsLength = contents.length;
+            } else if (i > 0) {
+                // 2回目以降のループでContentsが増えていない場合、ツールが呼ばれなかったと判断し、ループを抜ける
+                break;
+            }
+
             const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash', 
+                model: 'gemini-2.5-pro', // 🚨 Function Callingには 'gemini-2.5-pro' が推奨されます
                 contents: contents,
                 config: {
-                    systemInstruction: systemPromptRaw,
-                    tools: [{ functionDeclarations: [
-                        {
-                            name: 'googleSearch',
-                            description: '回答の深みや具体性を増すため、またはユーザーの質問が求めている客観的な事実（ニュース、歴史、一般的な社会情勢、特定の人物名など）について検索が必要な場合に利用する。',
-                            parameters: {
-                                type: 'object',
-                                properties: {
-                                    query: {
-                                        type: 'string',
-                                        description: 'ユーザーの質問に答えるために必要な検索クエリ。',
+                    systemInstruction: systemInstruction, // カスタムペルソナ
+                    tools: [{
+                        functionDeclarations: [
+                            {
+                                name: 'googleSearch',
+                                description: 'リアルタイムのニュース、日付、最新の出来事、一般的なWeb情報など、モデルの訓練データにない外部情報が必要な時に使用する。',
+                                parameters: {
+                                    type: 'OBJECT',
+                                    properties: {
+                                        query: {
+                                            type: 'STRING',
+                                            description: 'Web検索に使用する具体的な検索クエリ（日本語）',
+                                        },
                                     },
+                                    required: ['query'],
                                 },
-                                required: ['query'],
                             },
-                        },
-                    ]}],
+                        ],
+                    }],
                 },
             });
-            
+
             fullResponse = response;
             const call = response.functionCalls?.[0];
 
             // ツール呼び出しが無ければループを抜けて回答を返す
             if (!call) {
-                break; 
+                break;
             }
 
             // ★★★ ツール呼び出しを処理 ★★★
@@ -174,13 +158,13 @@ export async function POST(req: Request) {
 
                 // ツールからの応答を履歴に追加して、モデルに再度送信
                 contents.push(
-                    response.candidates![0].content, 
+                    response.candidates![0].content, // ツール呼び出しの記述
                     {
-                        role: 'function', 
-                        parts: [{ 
+                        role: 'function',
+                        parts: [{
                             functionResponse: {
                                 name: 'googleSearch',
-                                response: toolResult.result, 
+                                response: toolResult.result,
                             },
                         }],
                     }
@@ -194,12 +178,19 @@ export async function POST(req: Request) {
         // 最終応答を抽出
         // 🚨 エラーメッセージも定数と口調を使用
         const reply = fullResponse?.text ?? `ごめん、${AI_NICKNAME}はマジでうまく返せへんかったわ😭！`;
+
+        // 成功したら、チャット履歴を最新の応答で更新
+        chatHistory.push({ role: 'assistant', content: reply });
+        global.chatHistoryMap.set(sessionId, chatHistory);
+
         return NextResponse.json({ message: reply });
     } catch (error) {
         console.error('❌ API処理中のエラー:', error);
         if (error instanceof Error && error.message.includes("code:503")) {
             return NextResponse.json({ error: '現在サーバーが大変混み合っています。少し時間をおいて再度お試しください。' }, { status: 503 });
         }
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        // 🚨 エラーメッセージも定数と口調を使用
+        const errorReply = `マジごめん！APIとの通信中にヤバいエラーが出ちゃったみたい...！😭 ${NEW_PERSONA_DESCRIPTION}の私は、今ちょっとお話できないみたい。また後で試してみてくれると嬉しいな！`;
+        return NextResponse.json({ error: errorReply }, { status: 500 });
     }
 }
