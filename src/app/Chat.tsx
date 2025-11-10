@@ -3,15 +3,15 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 
 // 🚨 汎用性を持たせるための定数定義 (この部分を変更して切り替える)
-const AI_NICKNAME = '世真美容';
+const AI_NICKNAME = 'CATミュージックカレッジ';
 const GREETING_MESSAGE = `✨やっほー！ようこそ、${AI_NICKNAME}へ！私もあんたとお喋りできてめっちゃ嬉しいわ！`;
 const ASK_NAME_MESSAGE = `ところで、あんたのことなんて呼んだらいい？友達みたいに話そっ💖`;
 const DEFAULT_ERROR_MESSAGE = `ごめん、なんかうまく答えられへんかったみたい💦マジごめんね！`;
 const NETWORK_ERROR_MESSAGE = `ごめん！通信エラーが出ちゃったよ😭ちょっと待ってまた話しかけてみて！`;
 
 // UIデザインの定数
-const AI_ICON_PATH = '/s-icon.png'; // ⚠️ アイコン画像
-const BG_IMAGE_PATH = '/s-background.png'; // ⚠️ 背景画像
+const AI_ICON_PATH = '/CAT-icon.png'; // ⚠️ アイコン画像
+const BG_IMAGE_PATH = '/CAT-background.png'; // ⚠️ 背景画像
 const PRIMARY_COLOR_CLASSES = 'bg-pink-500 hover:bg-pink-600'; // ボタンカラー
 const USER_BUBBLE_COLOR_CLASS = 'bg-pink-100'; // ユーザーメッセージの背景色
 const ASSISTANT_BUBBLE_COLOR_CLASS = 'bg-gray-100'; // AIメッセージの背景色

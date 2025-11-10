@@ -7,8 +7,8 @@ import { buildFixedPrompt } from "./buildFixedPrompt";
 type Profile = Record<string, string>;
 
 // ★★★ 🚨 追加: SCHOOL_NAMEとNICKNAMEをインポート（または再定義）して使用 ★★★
-const SCHOOL_NAME = "世真美容専門学校";
-const NICKNAME = "世真美容";
+const SCHOOL_NAME = "CATミュージックカレッジ専門学校";
+const NICKNAME = "CATミュージックカレッジ";
 
 function loadCsvProfile(filePath: string): Profile {
   const buffer = fs.readFileSync(filePath);
