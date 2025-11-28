@@ -11,7 +11,7 @@ import { generateSystemPrompt } from '@/utils/generateSystemPrompt';
 import { google } from 'googleapis';
 
 // 🚨 汎用性を持たせるための定数定義 (この部分を変更して切り替える)
-const AI_NICKNAME = 'CATミュージックカレッジ';
+const AI_NICKNAME = '世真美容';
 const NEW_PERSONA_DESCRIPTION = '親しみやすい友達、美容テーマ、若者言葉';
 
 // Chat.tsxからメッセージの型を再定義

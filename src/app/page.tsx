@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Chat from './Chat';
 
 // 🚨 汎用化のための定数定義 (この部分を変更して切り替える)
-const AI_INTRODUCTION_NAME = 'CATミュージックカレッジ';
+const AI_INTRODUCTION_NAME = '世真美容';
 // AIの口調に合わせた挨拶文全体を定義
 // Chat.tsxの最初の挨拶とトーンを合わせ、オープニング画面用にアレンジ
 const AI_INTRODUCTION_PHRASE = `✨やっほー！ようこそ、${AI_INTRODUCTION_NAME}だよ！💖`; 
@@ -29,7 +29,7 @@ export default function Home() {
         method: 'POST',
       });
       const data = await res.json();
-      // 挨拶APIの応答は既にCATミュージックカレッジの口調になっているはず
+      // 挨拶APIの応答は既に世真美容の口調になっているはず
       return data.message || '今日も元気にいきましょう。'; 
     } catch (error) {
       console.error('自作API呼び出し失敗:', error);
@@ -51,7 +51,7 @@ export default function Home() {
       }
 
       // 🚨 修正箇所: AI_INTRODUCTION_PHRASEと季節の挨拶を結合し、口調を統一
-      // 「世真大学です。」の硬い表現を削除し、「CATミュージックカレッジ」のトーンに完全に合わせる
+      // 「世真大学です。」の硬い表現を削除し、「世真美容」のトーンに完全に合わせる
       // 構造: [オープニング挨拶]\n[季節のコメント]\n[会話への誘導]
       const fullText = `${AI_INTRODUCTION_PHRASE}\n${cleanSeasonal}\n今日はどんなお話をする？マジ楽しみ！`;
       setOpeningText(fullText);
@@ -91,7 +91,7 @@ export default function Home() {
       {showOpening ? (
         <div className="text-center whitespace-pre-line text-lg">{typedText}</div>
       ) : (
-        <img src="/CAT-logo.png" alt="University Logo" className="w-48 h-48 animate-fadeOut" />
+        <img src="/s-logo.png" alt="University Logo" className="w-48 h-48 animate-fadeOut" />
       )}
     </div>
   );
